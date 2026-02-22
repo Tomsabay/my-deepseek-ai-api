@@ -2,7 +2,7 @@
 FROM golang:1.21-alpine AS builder
 
 # 安装必要的系统依赖（CGO 针对 SQLite 是必需的）
-RUN apk add --no-cache gcc musl-dev default-libmysqlclient-dev
+RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /app
 
