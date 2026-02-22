@@ -1,0 +1,11 @@
+.env
+.git/
+.vscode/
+data/
+data/ai-api.db
+data/uploads/
+cmd/server/*.go
+!cmd/server/main.go
+# macOS & Windows
+.DS_Store
+Thumbs.db

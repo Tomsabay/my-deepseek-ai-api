@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能助手</title>
+    <!-- 字体：Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 图标库：Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Markdown 解析：Marked -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 代码高亮：Highlight.js -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* 用户与 AI 的对齐辅助类，为了保留部分原有逻辑防崩溃 */
+    </style>
+</head>
+
+<body>
+    <!-- 认证模态框 -->
+    <div class="modal-overlay active" id="authModal">
+        <div class="auth-box">
+            <div class="auth-header">
+                <i class="ph-fill ph-robot"></i>
+                <h2 id="authTitle">欢迎回来</h2>
+                <p id="authSubtitle" style="color:var(--text-secondary)">登录以继续使用 AI 助手</p>
+            </div>
+            <form id="authForm" onsubmit="handleAuth(event)">
+                <div class="form-group" id="nicknameGroup" style="display: none;">
+                    <label>怎么称呼你</label>
+                    <input type="text" class="form-input" id="nicknameInput" placeholder="请输入你的昵称">
+                </div>
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" class="form-input" id="usernameInput" required placeholder="请输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" class="form-input" id="passwordInput" required placeholder="请输入密码">
+                </div>
+                <button type="submit" class="btn-primary" id="authSubmitBtn">登录</button>
+            </form>
+            <div class="auth-switch">
+                <span id="authSwitchText">还没有账号？</span>
+                <a onclick="toggleAuthMode()" id="authSwitchLink">立即注册</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 左侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" onclick="createNewConversation()">
+                <i class="ph-bold ph-plus"></i> 新对话
+            </button>
+        </div>
+
+        <div class="history-list" id="historyList">
+            <!-- 动态生成历史记录 -->
+        </div>
+
+        <div class="user-profile">
+            <div class="user-avatar" id="userAvatar">U</div>
+            <div class="user-info" style="flex:1; margin-left:12px; overflow:hidden;">
+                <div id="userName"
+                    style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    User</div>
+                <div style="font-size:12px;color:var(--text-secondary);">Pro Plan</div>
+            </div>
+            <div class="logout-btn" onclick="logout()" title="退出登录">
+                <i class="ph-bold ph-sign-out" style="font-size:20px;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="main-content">
+        <div class="main-header">
+            <!-- 模型选择器：点击胶囊展开下拉菜单，选择不同模型 -->
+            <div class="model-selector-wrapper" id="modelSelectorWrapper">
+                <div class="model-capsule" id="modelCapsule" onclick="toggleModelDropdown()">
+                    <i class="ph-fill ph-lightning" id="modelIcon"></i>
+                    <span id="modelLabel">DeepSeek V3</span>
+                    <i class="ph-bold ph-caret-down"
+                        style="font-size:12px;margin-left:4px;color:var(--text-secondary)"></i>
+                </div>
+                <!-- 下拉菜单内容，每行是一个模型选项 -->
+                <div class="model-dropdown" id="modelDropdown">
+                    <!-- deepseek-chat = DeepSeek V3，速度快，适合日常对话 -->
+                    <div class="model-option active" id="opt-deepseek-chat"
+                        onclick="selectModel('deepseek-chat', 'DeepSeek V3', 'v3')">
+                        <div class="model-option-icon v3"><i class="ph-fill ph-lightning"></i></div>
+                        <div class="model-option-info">
+                            <div class="model-option-name">DeepSeek V3</div>
+                            <div class="model-option-desc">速度快 · 适合日常问答与创作</div>
+                        </div>
+                        <i class="ph-bold ph-check model-option-check"></i>
+                    </div>
+                    <!-- deepseek-reasoner = DeepSeek R1，推理模型，适合复杂问题 -->
+                    <div class="model-option" id="opt-deepseek-reasoner"
+                        onclick="selectModel('deepseek-reasoner', 'DeepSeek R1', 'r1')">
+                        <div class="model-option-icon r1"><i class="ph-fill ph-brain"></i></div>
+                        <div class="model-option-info">
+                            <div class="model-option-name">DeepSeek R1</div>
+                            <div class="model-option-desc">深度推理 · 适合数学、逻辑与代码</div>
+                        </div>
+                        <i class="ph-bold ph-check model-option-check"></i>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <!-- 这里可以放更多操作，比如分享、设置 -->
+            </div>
+        </div>
+
+        <div class="chat-scroll-area" id="chatScrollArea">
+            <div id="welcomeScreen" class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="ph-duotone ph-sparkle"></i>
+                </div>
+                <h2>今天想聊点什么？</h2>
+                <div class="suggestions-grid">
+                    <div class="suggestion-card" onclick="sendSuggestion('帮我解释一下什么是量子纠缠，用小学生的语言')">
+                        <h4>解释量子纠缠</h4>
+                        <p>用通俗易懂的语言解释复杂的物理概念</p>
+                    </div>
+                    <div class="suggestion-card" onclick="sendSuggestion('写一个 Python 脚本来分析 CSV 文件数据')">
+                        <h4>Python 数据分析</h4>
+                        <p>编写脚本处理 CSV 文件并生成图表</p>
+                    </div>
+                    <div class="suggestion-card" onclick="sendSuggestion('给我的产品写一段吸引人的营销文案，产品是智能咖啡杯')">
+                        <h4>产品营销文案</h4>
+                        <p>为智能咖啡杯撰写社交媒体推广文案</p>
+                    </div>
+                    <div class="suggestion-card" onclick="sendSuggestion('如何制定一个高效的周计划？')">
+                        <h4>周计划建议</h4>
+                        <p>提高工作效率的时间管理技巧</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chatMessages" class="chat-messages-container">
+                <!-- 消息会插入到这里 -->
+            </div>
+        </div>
+
+        <div class="input-area">
+            <!-- 隐藏的文件输入 -->
+            <input type="file" id="fileInput" style="display:none" accept="image/*,.pdf,.txt,.md,.csv,.json" multiple
+                onchange="handleFileSelect(event)">
+            <input type="file" id="imageInput" style="display:none" accept="image/*" multiple
+                onchange="handleFileSelect(event)">
+
+            <!-- 附件预览区域 -->
+            <div class="attachments-preview" id="attachmentsPreview"></div>
+
+            <div class="input-box-wrapper">
+                <textarea class="chat-textarea" id="chatInput" rows="1" placeholder="发送消息给 AI..."
+                    oninput="autoResize(this)"></textarea>
+                <div class="input-controls">
+                    <div class="input-actions">
+                        <i class="ph-bold ph-paperclip action-icon" title="上传文件"
+                            onclick="document.getElementById('fileInput').click()"></i>
+                        <i class="ph-bold ph-image action-icon" title="上传图片"
+                            onclick="document.getElementById('imageInput').click()"></i>
+                        <div
+                            style="display:flex;align-items:center;margin-left:8px;font-size:12px;color:var(--text-secondary);cursor:pointer">
+                            <input type="checkbox" id="streamToggle" checked style="margin-right:4px"> 流式
+                        </div>
+                    </div>
+                    <button class="send-message-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                        <i class="ph-bold ph-paper-plane-right"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="text-align:center;margin-top:12px;font-size:12px;color:#475569">
+                AI 可能会产生错误信息，请核查重要事实。支持拖拽上传图片和文件。
+            </div>
+        </div>
+    </div>
+
+    <!-- 拖拽上传遮罩层 -->
+    <div class="drop-overlay" id="dropOverlay">
+        <div class="drop-overlay-content">
+            <i class="ph-bold ph-cloud-arrow-up"></i>
+            <p>释放以上传文件</p>
+        </div>
+    </div>
+
+    <!-- 图片放大查看器 -->
+    <div class="image-lightbox" id="imageLightbox" onclick="closeLightbox()">
+        <img id="lightboxImage" src="" alt="放大查看">
+    </div>
+
+    <!-- 逻辑代码 -->
+    <script>
+        // 配置 Highlight.js
+        hljs.configure({ ignoreUnescapedHTML: true });
+
+        // 配置 Marked.js
+        // 自定义 renderer 以实现代码块头部（复制按钮）
+        const renderer = new marked.Renderer();
+        const originalCodeRenderer = renderer.code.bind(renderer);
+
+        // 兼容 marked.js v5+ 的新 API：参数是一个对象 { text, lang, escaped }
+        renderer.code = (options) => {
+            // 处理新旧两种 API 格式
+            let codeText, language;
+            if (typeof options === 'object' && options !== null) {
+                // 新版 API (v5+)
+                codeText = options.text || '';
+                language = options.lang || '';
+            } else {
+                // 旧版 API (兼容)
+                codeText = options || '';
+                language = arguments[1] || '';
+            }
+
+            // 生成唯一 ID
+            const id = 'code-' + Math.random().toString(36).substr(2, 9);
+            const validLang = (language && hljs.getLanguage(language)) ? language : 'plaintext';
+
+            // 确保 codeText 是字符串
+            const safeCode = String(codeText);
+            const highlighted = hljs.highlight(safeCode, { language: validLang }).value;
+
+            return `
+            <div class="code-block-wrapper">
+                <div class="code-header">
+                    <span>${validLang}</span>
+                    <button class="copy-btn" onclick="copyToClipboard('${id}', this)">
+                        <i class="ph-bold ph-copy"></i> Copy
+                    </button>
+                </div>
+                <pre><code id="${id}" class="hljs ${validLang}">${highlighted}</code></pre>
+            </div>`;
+        };
+
+        marked.use({ renderer });
+
+        // 全局状态管理
+        const state = {
+            user: null,
+            token: localStorage.getItem('auth_token'),
+            currentConversationId: null,
+            isRegisterMode: false,
+            isGenerating: false,
+            pendingAttachments: [],       // 待发送的附件列表
+            selectedModel: 'deepseek-chat' // 当前选中的模型名称（默认 V3）
+        };
+
+        // ==================== 模型选择器逻辑 ====================
+
+        // toggleModelDropdown: 点击胶囊时切换下拉菜单的显示/隐藏
+        function toggleModelDropdown() {
+            document.getElementById('modelDropdown').classList.toggle('open');
+        }
+
+        // selectModel: 用户点击某个模型选项时调用
+        // modelId: API 名称（如 deepseek-chat）
+        // label:   界面显示名称（如 DeepSeek V3）
+        // iconType: 图标风格类名（v3 或 r1）
+        function selectModel(modelId, label, iconType) {
+            // 更新全局状态
+            state.selectedModel = modelId;
+
+            // 更新顶部胶囊的文字和图标颜色
+            document.getElementById('modelLabel').textContent = label;
+            const icon = document.getElementById('modelIcon');
+            icon.className = iconType === 'r1' ? 'ph-fill ph-brain' : 'ph-fill ph-lightning';
+            icon.style.color = iconType === 'r1' ? '#a855f7' : '';
+
+            // 清除所有选项的 active 状态，给选中项加上
+            document.querySelectorAll('.model-option').forEach(el => el.classList.remove('active'));
+            document.getElementById('opt-' + modelId).classList.add('active');
+
+            // 关闭下拉菜单
+            document.getElementById('modelDropdown').classList.remove('open');
+        }
+
+        // 点击菜单外部时关闭下拉菜单
+        document.addEventListener('click', function (e) {
+            const wrapper = document.getElementById('modelSelectorWrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('modelDropdown').classList.remove('open');
+            }
+        });
+
+        // DOM 元素引用
+        const els = {
+            chatInput: document.getElementById('chatInput'),
+            sendBtn: document.getElementById('sendBtn'),
+            chatScrollArea: document.getElementById('chatScrollArea'),
+            chatMessages: document.getElementById('chatMessages'),
+            welcomeScreen: document.getElementById('welcomeScreen'),
+            authModal: document.getElementById('authModal'),
+            historyList: document.getElementById('historyList'),
+            attachmentsPreview: document.getElementById('attachmentsPreview'),
+            dropOverlay: document.getElementById('dropOverlay')
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            if (state.token) {
+                els.authModal.classList.remove('active');
+                // 加载数据
+                const savedUser = localStorage.getItem('user_info');
+                if (savedUser) {
+                    state.user = JSON.parse(savedUser);
+                    updateUserProfile(state.user);
+                }
+                loadConversations();
+            } else {
+                els.authModal.classList.add('active'); // 显示登录框
+            }
+
+            // 监听输入，控制按钮状态（有文字或有附件都可发送）
+            els.chatInput.addEventListener('input', () => {
+                updateSendButtonState();
+            });
+
+            // 监听回车发送
+            els.chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!els.sendBtn.disabled) sendMessage();
+                }
+            });
+
+            // 拖拽上传事件
+            setupDragAndDrop();
+        });
+
+        // 更新发送按钮状态
+        function updateSendButtonState() {
+            els.sendBtn.disabled = els.chatInput.value.trim() === '' && state.pendingAttachments.length === 0;
+        }
+
+        // 自动调整文本框高度
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        // ==================== 认证逻辑 ====================
+        function toggleAuthMode() {
+            state.isRegisterMode = !state.isRegisterMode;
+            document.getElementById('authTitle').innerText = state.isRegisterMode ? '创建账户' : '欢迎回来';
+            document.getElementById('authSubtitle').innerText = state.isRegisterMode ? '注册以开始使用' : '登录以继续使用';
+            document.getElementById('authSubmitBtn').innerText = state.isRegisterMode ? '注册' : '登录';
+            document.getElementById('authSwitchText').innerText = state.isRegisterMode ? '已有账号？' : '还没有账号？';
+            document.getElementById('authSwitchLink').innerText = state.isRegisterMode ? '直接登录' : '立即注册';
+            document.getElementById('nicknameGroup').style.display = state.isRegisterMode ? 'block' : 'none';
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('usernameInput').value;
+            const password = document.getElementById('passwordInput').value;
+            const nickname = document.getElementById('nicknameInput').value;
+            const btn = document.getElementById('authSubmitBtn');
+
+            btn.innerHTML = '<i class="ph-bold ph-spinner ph-spin"></i> 处理中...';
+            btn.disabled = true;
+
+            try {
+                const endpoint = state.isRegisterMode ? '/api/v1/auth/register' : '/api/v1/auth/login';
+                const body = { username, password };
+                if (state.isRegisterMode) body.nickname = nickname;
+
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '请求失败');
+
+                if (data.access_token) {
+                    // 登录成功
+                    loginSuccess(data);
+                } else if (state.isRegisterMode) {
+                    alert('注册成功，请登录');
+                    toggleAuthMode();
+                }
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.innerHTML = state.isRegisterMode ? '注册' : '登录';
+                btn.disabled = false;
+            }
+        }
+
+        function loginSuccess(data) {
+            state.token = data.access_token;
+            state.user = data.user;
+            localStorage.setItem('auth_token', data.access_token);
+            localStorage.setItem('user_info', JSON.stringify(data.user)); // 简单缓存用户信息
+
+            updateUserProfile(data.user);
+            els.authModal.classList.remove('active');
+            loadConversations();
+        }
+
+        function logout() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_info');
+            location.reload();
+        }
+
+        function updateUserProfile(user) {
+            document.getElementById('userName').innerText = user.nickname || user.username;
+            document.getElementById('userAvatar').innerText = (user.nickname || user.username)[0].toUpperCase();
+        }
+
+        // ==================== 对话核心逻辑 ====================
+        async function sendMessage() {
+            const content = els.chatInput.value.trim();
+            const hasContent = content !== '';
+            const hasAttachments = state.pendingAttachments.length > 0;
+
+            // 必须有内容或附件才能发送
+            if ((!hasContent && !hasAttachments) || state.isGenerating) return;
+
+            // 1. 如果是新对话，先创建
+            if (!state.currentConversationId) {
+                try {
+                    const titleText = content ? content.slice(0, 15) : '图片对话';
+                    const res = await fetchWithAuth('/api/v1/conversations', {
+                        method: 'POST',
+                        body: JSON.stringify({ title: titleText })
+                    });
+                    const data = await res.json();
+                    state.currentConversationId = data.id;
+                    await loadConversations();
+                    // 隐藏欢迎页
+                    els.welcomeScreen.classList.add('hidden');
+                } catch (err) {
+                    console.error(err);
+                    return;
+                }
+            } else {
+                els.welcomeScreen.classList.add('hidden');
+            }
+
+            // 2. 界面处理
+            state.isGenerating = true;
+            els.sendBtn.disabled = true;
+            els.chatInput.value = '';
+            els.chatInput.style.height = 'auto'; // Reset height
+
+            // 保存当前附件并清空预览
+            const currentAttachments = [...state.pendingAttachments];
+            clearAttachments();
+
+            // 3. 添加用户消息到界面（包含图片预览）
+            appendMessage(content, 'user', currentAttachments);
+
+            // 4. 请求 AI
+            const useStream = document.getElementById('streamToggle').checked;
+
+            try {
+                // 获取上下文（这里简化，只获取前几条，实际应该由后端处理上下文窗口）
+                // 为了兼容现有逻辑，我们还是要在前端拼凑 messages 数组
+                const historyRes = await fetchWithAuth(`/api/v1/conversations/${state.currentConversationId}/messages`);
+                const historyData = await historyRes.json();
+
+                let messages = (historyData.messages || []).map(m => ({
+                    role: m.role, content: m.content
+                }));
+                // 添加当前这条
+                const userMessage = content || '请描述这张图片';
+                messages.push({ role: 'user', content: userMessage });
+
+                // 构建附件数据（用于发送给后端）
+                const attachmentsData = currentAttachments.map(a => ({
+                    id: a.id,
+                    type: a.type,
+                    url: a.url,
+                    filename: a.filename
+                }));
+
+                const controller = new AbortController();
+                const res = await fetch('/api/v1/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: messages,
+                        stream: useStream,
+                        conversation_id: state.currentConversationId,
+                        attachments: attachmentsData,
+                        model: state.selectedModel  // 将前端选中的模型传给后端
+                    }),
+                    signal: controller.signal
+                });
+
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || `请求失败 (${res.status})`);
+                }
+
+                // 创建 AI 消息气泡
+                const { contentParams } = appendMessage('', 'assistant');
+                // 主回答区域（思考块插在它之前）
+                const mainContentEl = document.createElement('div');
+                contentParams.appendChild(mainContentEl);
+
+                let fullContent = "";
+                let fullReasoning = "";
+                let thinkingEl = null;
+                let thinkingContentEl = null;
+                let thinkingDone = false;
+
+                if (useStream) {
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let lastRenderTime = 0;
+                    let lastChunkTime = Date.now();
+                    const streamStart = Date.now();
+                    const idleTimeoutMs = 15000;
+                    const maxDurationMs = 180000;
+                    let doneReceived = false;
+                    const cursorEl = document.createElement('span');
+                    cursorEl.className = 'cursor';
+
+                    // 超时兜底，避免流一直不结束
+                    const idleTimer = setInterval(() => {
+                        const now = Date.now();
+                        if (now - lastChunkTime > idleTimeoutMs || now - streamStart > maxDurationMs) {
+                            controller.abort();
+                        }
+                    }, 1000);
+
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            lastChunkTime = Date.now();
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop() || ''; // 保留未完成的行
+
+                            for (const line of lines) {
+                                const trimmed = line.trim();
+                                if (!trimmed.startsWith('data: ')) continue;
+
+                                const data = trimmed.slice(6);
+                                if (data === '[DONE]') {
+                                    doneReceived = true;
+                                    break;
+                                }
+
+                                try {
+                                    const json = JSON.parse(data);
+                                    if (json.error) {
+                                        throw new Error(json.error);
+                                    }
+
+                                    // 处理思考过程（DeepSeek R1）
+                                    if (json.reasoning) {
+                                        if (!thinkingEl) {
+                                            thinkingEl = document.createElement('div');
+                                            thinkingEl.className = 'thinking-block';
+                                            thinkingEl.innerHTML = `
+                                                <div class="thinking-header" onclick="this.parentElement.classList.toggle('collapsed');this.querySelector('.thinking-toggle-icon').style.transform=this.parentElement.classList.contains('collapsed')?'rotate(-90deg)':''">
+                                                    <i class="ph-fill ph-brain" style="color:#a855f7"></i>
+                                                    <span class="thinking-status animating">思考中...</span>
+                                                    <i class="ph-bold ph-caret-down thinking-toggle-icon"></i>
+                                                </div>
+                                                <div class="thinking-content"></div>
+                                            `;
+                                            thinkingContentEl = thinkingEl.querySelector('.thinking-content');
+                                            contentParams.insertBefore(thinkingEl, mainContentEl);
+                                        }
+                                        fullReasoning += json.reasoning;
+                                        thinkingContentEl.textContent = fullReasoning;
+                                        scrollToBottom();
+                                    }
+
+                                    // 处理正式回答
+                                    if (json.content) {
+                                        // 第一个 content 到来时，折叠思考块
+                                        if (thinkingEl && !thinkingDone) {
+                                            thinkingDone = true;
+                                            thinkingEl.classList.add('collapsed');
+                                            const statusEl = thinkingEl.querySelector('.thinking-status');
+                                            statusEl.textContent = `思考过程（${fullReasoning.length} 字）`;
+                                            statusEl.classList.remove('animating');
+                                        }
+
+                                        fullContent += json.content;
+
+                                        // 性能优化：每 200ms 渲染一次
+                                        const now = Date.now();
+                                        if (now - lastRenderTime > 200) {
+                                            mainContentEl.innerHTML = marked.parse(fullContent);
+                                            mainContentEl.appendChild(cursorEl);
+                                            scrollToBottom();
+                                            lastRenderTime = now;
+                                        }
+                                    }
+                                } catch (e) { }
+                            }
+
+                            if (doneReceived) {
+                                try { reader.cancel(); } catch (e) { }
+                                break;
+                            }
+                        }
+                    } finally {
+                        clearInterval(idleTimer);
+                    }
+
+                    // 最终渲染一次
+                    if (fullContent) {
+                        mainContentEl.innerHTML = marked.parse(fullContent);
+                        mainContentEl.querySelectorAll('pre code').forEach((block) => {
+                            hljs.highlightElement(block);
+                        });
+                    }
+                } else {
+                    const data = await res.json();
+                    mainContentEl.innerHTML = marked.parse(data.reply);
+                    mainContentEl.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                }
+
+            } catch (err) {
+                appendMessage('Error: ' + err.message, 'assistant');
+            } finally {
+                state.isGenerating = false;
+                updateSendButtonState();
+            }
+        }
+
+        function appendMessage(text, role, attachments = []) {
+            const row = document.createElement('div');
+            row.className = `message-row ${role}`;
+
+            const avatarHtml = role === 'user'
+                ? '<div class="msg-avatar user-avatar-icon"><i class="ph-bold ph-user"></i></div>'
+                : '<div class="msg-avatar ai-avatar-icon"><i class="ph-fill ph-lightning"></i></div>';
+
+            // 内容容器
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'msg-content markdown-body';
+
+            // 如果有附件，先显示附件（图片）
+            if (attachments && attachments.length > 0) {
+                const attachmentsHtml = attachments
+                    .filter(a => a.type === 'image')
+                    .map(a => `<img src="${a.url}" alt="${a.filename}" class="message-image" onclick="openLightbox('${a.url}')">`)
+                    .join('');
+
+                if (attachmentsHtml) {
+                    contentDiv.innerHTML = attachmentsHtml;
+                }
+            }
+
+            // 添加文本内容
+            if (text) {
+                const textHtml = marked.parse(text);
+                contentDiv.innerHTML += textHtml;
+                // 高亮代码
+                if (role === 'assistant') {
+                    setTimeout(() => {
+                        contentDiv.querySelectorAll('pre code').forEach((block) => {
+                            hljs.highlightElement(block);
+                        });
+                    }, 0);
+                }
+            }
+
+            row.innerHTML = `
+                <div class="message-container">
+                    ${avatarHtml}
+                    <!-- 动态插入 contentDiv -->
+                </div>
+            `;
+
+            row.querySelector('.message-container').appendChild(contentDiv);
+            els.chatMessages.appendChild(row);
+            scrollToBottom();
+
+            return { row, contentParams: contentDiv };
+        }
+
+        // ==================== 侧边栏逻辑 ====================
+        async function loadConversations() {
+            try {
+                const res = await fetchWithAuth('/api/v1/conversations');
+                if (!res.ok) return;
+                const data = await res.json();
+                renderHistory(data.conversations || []);
+            } catch (err) { console.error(err); }
+        }
+
+        function renderHistory(conversations) {
+            els.historyList.innerHTML = '<div class="history-group-title">今天</div>';
+
+            conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = `history-item ${conv.id === state.currentConversationId ? 'active' : ''}`;
+                item.onclick = (e) => {
+                    if (!e.target.closest('.delete-btn')) switchChat(conv.id);
+                };
+
+                item.innerHTML = `
+                    <i class="ph-regular ph-chat-circle"></i>
+                    <span>${conv.title || '新对话'}</span>
+                    <div class="delete-btn" onclick="deleteChat(event, ${conv.id})">
+                        <i class="ph-bold ph-trash"></i>
+                    </div>
+                `;
+                els.historyList.appendChild(item);
+            });
+        }
+
+        async function switchChat(id) {
+            if (state.currentConversationId === id) return;
+            state.currentConversationId = id;
+            els.welcomeScreen.classList.add('hidden');
+
+            // 高亮
+            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+            // 这里为了简单不重新渲染列表，而是直接重新加载（生产环境应该优化 DOM 操作）
+            loadConversations();
+
+            // 加载消息
+            els.chatMessages.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary)"><i class="ph-bold ph-spinner ph-spin"></i> 加载记录中...</div>';
+
+            try {
+                const res = await fetchWithAuth(`/api/v1/conversations/${id}/messages`);
+                const data = await res.json();
+                els.chatMessages.innerHTML = ''; // 清空 loading
+
+                if (data.messages) {
+                    data.messages.forEach(msg => {
+                        appendMessage(msg.content, msg.role);
+                    });
+                }
+            } catch (err) {
+                els.chatMessages.innerHTML = '加载失败';
+            }
+        }
+
+        async function createNewConversation() {
+            state.currentConversationId = null;
+            els.chatMessages.innerHTML = '';
+            els.welcomeScreen.classList.remove('hidden');
+            document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+        }
+
+        async function deleteChat(e, id) {
+            e.stopPropagation();
+            if (!confirm('确定删除吗？')) return;
+            await fetchWithAuth(`/api/v1/conversations/${id}`, { method: 'DELETE' });
+            if (state.currentConversationId === id) createNewConversation();
+            loadConversations();
+        }
+
+        function sendSuggestion(text) {
+            els.chatInput.value = text;
+            els.sendBtn.disabled = false;
+            sendMessage();
+        }
+
+        // ==================== 辅助功能 ====================
+        async function fetchWithAuth(url, options = {}) {
+            const headers = options.headers || {};
+            if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+            headers['Content-Type'] = 'application/json';
+            return fetch(url, { ...options, headers });
+        }
+
+        function scrollToBottom() {
+            els.chatScrollArea.scrollTo({ top: els.chatScrollArea.scrollHeight, behavior: 'instant' });
+        }
+
+        // 复制到剪贴板
+        function copyToClipboard(elementId, btn) {
+            const text = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="ph-bold ph-check"></i> Copied!';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            });
+        }
+
+        // ==================== 文件上传功能 ====================
+
+        // 设置拖拽上传
+        function setupDragAndDrop() {
+            let dragCounter = 0;
+
+            document.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                dragCounter++;
+                els.dropOverlay.classList.add('active');
+            });
+
+            document.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dragCounter--;
+                if (dragCounter === 0) {
+                    els.dropOverlay.classList.remove('active');
+                }
+            });
+
+            document.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            document.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                dragCounter = 0;
+                els.dropOverlay.classList.remove('active');
+
+                const files = Array.from(e.dataTransfer.files);
+                for (const file of files) {
+                    await uploadFile(file);
+                }
+            });
+        }
+
+        // 处理文件选择
+        async function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            for (const file of files) {
+                await uploadFile(file);
+            }
+            // 清空 input 以便再次选择相同文件
+            event.target.value = '';
+        }
+
+        // 上传文件到服务器
+        async function uploadFile(file) {
+            // 验证文件大小（20MB 限制）
+            if (file.size > 20 * 1024 * 1024) {
+                alert(`文件 "${file.name}" 超过 20MB 限制`);
+                return;
+            }
+
+            // 创建 FormData
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 显示上传中的预览
+            const tempId = 'temp-' + Date.now();
+            const isImage = file.type.startsWith('image/');
+
+            if (isImage) {
+                // 图片：显示本地预览
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    addAttachmentPreview({
+                        id: tempId,
+                        type: 'image',
+                        url: e.target.result,
+                        filename: file.name,
+                        uploading: true
+                    });
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // 文档：显示图标
+                addAttachmentPreview({
+                    id: tempId,
+                    type: 'document',
+                    filename: file.name,
+                    size: file.size,
+                    uploading: true
+                });
+            }
+
+            try {
+                // 调用上传接口
+                const response = await fetch('/api/v1/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || '上传失败');
+                }
+
+                // 更新附件信息（用服务器返回的真实数据替换临时数据）
+                const attachment = data.attachment;
+                updateAttachmentPreview(tempId, attachment);
+
+                // 添加到待发送列表
+                state.pendingAttachments.push(attachment);
+                updateSendButtonState();
+
+            } catch (err) {
+                console.error('上传失败:', err);
+                alert(`上传失败: ${err.message}`);
+                // 移除失败的预览
+                removeAttachmentPreview(tempId);
+            }
+        }
+
+        // 添加附件预览
+        function addAttachmentPreview(attachment) {
+            const item = document.createElement('div');
+            item.id = 'attachment-' + attachment.id;
+            item.className = `attachment-item ${attachment.type}`;
+
+            if (attachment.type === 'image') {
+                item.innerHTML = `
+                    <img src="${attachment.url}" alt="${attachment.filename}">
+                    <button class="attachment-remove" onclick="removeAttachment('${attachment.id}')">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                    ${attachment.uploading ? '<div class="upload-progress"><div class="upload-progress-bar" style="width: 50%"></div></div>' : ''}
+                `;
+            } else {
+                const sizeStr = formatFileSize(attachment.size);
+                item.innerHTML = `
+                    <i class="ph-bold ph-file-text"></i>
+                    <div class="file-info">
+                        <div class="file-name">${attachment.filename}</div>
+                        <div class="file-size">${sizeStr}</div>
+                    </div>
+                    <button class="attachment-remove" onclick="removeAttachment('${attachment.id}')">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                    ${attachment.uploading ? '<div class="upload-progress"><div class="upload-progress-bar" style="width: 50%"></div></div>' : ''}
+                `;
+            }
+
+            els.attachmentsPreview.appendChild(item);
+        }
+
+        // 更新附件预览（上传完成后）
+        function updateAttachmentPreview(tempId, realAttachment) {
+            const item = document.getElementById('attachment-' + tempId);
+            if (!item) return;
+
+            // 更新 ID
+            item.id = 'attachment-' + realAttachment.id;
+
+            // 移除进度条
+            const progress = item.querySelector('.upload-progress');
+            if (progress) progress.remove();
+
+            // 更新删除按钮的 ID
+            const removeBtn = item.querySelector('.attachment-remove');
+            if (removeBtn) {
+                removeBtn.setAttribute('onclick', `removeAttachment('${realAttachment.id}')`);
+            }
+
+            // 如果是图片，更新 src 为服务器 URL
+            if (realAttachment.type === 'image') {
+                const img = item.querySelector('img');
+                if (img) img.src = realAttachment.url;
+            }
+        }
+
+        // 移除附件预览和数据
+        function removeAttachment(id) {
+            removeAttachmentPreview(id);
+            state.pendingAttachments = state.pendingAttachments.filter(a => a.id !== id);
+            updateSendButtonState();
+        }
+
+        // 仅移除预览元素
+        function removeAttachmentPreview(id) {
+            const item = document.getElementById('attachment-' + id);
+            if (item) item.remove();
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (!bytes) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // 清空附件
+        function clearAttachments() {
+            state.pendingAttachments = [];
+            els.attachmentsPreview.innerHTML = '';
+        }
+
+        // 图片放大查看
+        function openLightbox(src) {
+            document.getElementById('lightboxImage').src = src;
+            document.getElementById('imageLightbox').classList.add('active');
+        }
+
+        function closeLightbox() {
+            document.getElementById('imageLightbox').classList.remove('active');
+        }
+    </script>
+</body>
+
+</html>
