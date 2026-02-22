@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"ai-api/internal/middleware"
 	"ai-api/internal/model"
 	"ai-api/internal/service"
 )
@@ -19,17 +20,19 @@ import (
 type Handler struct {
 	aiService           service.AIService
 	conversationService *service.ConversationService
-	uploadService       *service.UploadService // 新增：用于处理图片附件
+	uploadService       *service.UploadService
+	authService         *service.AuthService // 用于 Chat 路由的可选认证
 }
 
 // ============================================
 // NewHandler 创建一个新的 Handler 实例
 // ============================================
-func NewHandler(aiService service.AIService, conversationService *service.ConversationService, uploadService *service.UploadService) *Handler {
+func NewHandler(aiService service.AIService, conversationService *service.ConversationService, uploadService *service.UploadService, authService *service.AuthService) *Handler {
 	return &Handler{
 		aiService:           aiService,
 		conversationService: conversationService,
 		uploadService:       uploadService,
+		authService:         authService,
 	}
 }
 
@@ -38,6 +41,8 @@ func NewHandler(aiService service.AIService, conversationService *service.Conver
 // ============================================
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	v1 := r.Group("/api/v1")
+	// 聊天路由使用可选认证：登录用户绑定对话，未登录也能用基础聊天
+	v1.Use(middleware.OptionalAuthMiddleware(h.authService))
 	{
 		// POST /api/v1/chat - 聊天接口（支持多轮对话和流式响应）
 		v1.POST("/chat", h.Chat)
@@ -60,10 +65,28 @@ func (h *Handler) Chat(c *gin.Context) {
 		return
 	}
 
+	// 获取当前登录用户 ID（可选认证，可能为 0）
+	var currentUserID uint
+	if uid, exists := c.Get("userID"); exists {
+		currentUserID = uid.(uint)
+	}
+
 	// 尝试保存用户消息（如果有 ConversationID）
+	// 同时校验对话是否属于当前登录用户，防止跨账号串数据
 	if req.ConversationID > 0 {
+		if currentUserID > 0 {
+			// 校验对话归属权：只有对话拥有者才能写入消息
+			_, err := h.conversationService.GetConversation(req.ConversationID, currentUserID)
+			if err != nil {
+				log.Printf("chat: 用户 %d 尝试访问不属于自己的对话 %d", currentUserID, req.ConversationID)
+				c.JSON(http.StatusForbidden, model.ChatResponse{
+					Error: "无权访问此对话",
+				})
+				return
+			}
+		}
+
 		userContent := req.Message
-		// 如果是用 Messages 数组传的，取最后一条用户消息
 		if len(req.Messages) > 0 {
 			lastMsg := req.Messages[len(req.Messages)-1]
 			if lastMsg.Role == "user" {

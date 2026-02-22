@@ -490,9 +490,11 @@
                 }));
 
                 const controller = new AbortController();
+                const chatHeaders = { 'Content-Type': 'application/json' };
+                if (state.token) chatHeaders['Authorization'] = `Bearer ${state.token}`;
                 const res = await fetch('/api/v1/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: chatHeaders,
                     body: JSON.stringify({
                         messages: messages,
                         stream: useStream,

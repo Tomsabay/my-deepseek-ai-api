@@ -61,8 +61,7 @@ func NewOpenAIService(baseURL, apiKey, modelName, systemPrompt string) *OpenAISe
 		model:        modelName,
 		systemPrompt: systemPrompt,
 		httpClient: &http.Client{
-			// AI 模型的长推理（尤其是 R1）可能长达十几分钟，设置 15 分钟防断流
-			Timeout: 900 * time.Second,
+			Timeout: 120 * time.Second, // 流式响应可能需要更长时间
 		},
 	}
 }
