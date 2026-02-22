@@ -268,6 +268,7 @@ func (h *Handler) handleStreamResponse(c *gin.Context, messages []model.OpenAIMe
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
+	c.Header("X-Accel-Buffering", "no") // 关键！强制关闭代理缓存缓冲以实现实时流输出
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	w := c.Writer
@@ -317,6 +318,7 @@ func (h *Handler) handleMultimodalStreamResponse(c *gin.Context, messages []mode
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("Transfer-Encoding", "chunked")
+	c.Header("X-Accel-Buffering", "no") // 同上
 	c.Header("Access-Control-Allow-Origin", "*")
 
 	w := c.Writer

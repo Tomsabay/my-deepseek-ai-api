@@ -527,8 +527,8 @@
                     let lastRenderTime = 0;
                     let lastChunkTime = Date.now();
                     const streamStart = Date.now();
-                    const idleTimeoutMs = 15000;
-                    const maxDurationMs = 180000;
+                    const idleTimeoutMs = 120000;
+                    const maxDurationMs = 600000;
                     let doneReceived = false;
                     const cursorEl = document.createElement('span');
                     cursorEl.className = 'cursor';
