@@ -1,5 +1,5 @@
 # 第一阶段：构建可执行文件
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # 安装必要的系统依赖（CGO 针对 SQLite 是必需的）
 RUN apk add --no-cache gcc musl-dev

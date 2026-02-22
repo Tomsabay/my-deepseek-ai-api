@@ -2,8 +2,6 @@ module ai-api
 
 go 1.24.0
 
-toolchain go1.24.11
-
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
