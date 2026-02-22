@@ -33,19 +33,56 @@
                 <h2 id="authTitle">欢迎回来</h2>
                 <p id="authSubtitle" style="color:var(--text-secondary)">登录以继续使用 AI 助手</p>
             </div>
-            <form id="authForm" onsubmit="handleAuth(event)">
+            <form id="authForm" onsubmit="handleAuth(event)" novalidate>
+                <!-- 昵称（仅注册时显示） -->
                 <div class="form-group" id="nicknameGroup" style="display: none;">
                     <label>怎么称呼你</label>
-                    <input type="text" class="form-input" id="nicknameInput" placeholder="请输入你的昵称">
+                    <input type="text" class="form-input" id="nicknameInput" placeholder="请输入你的昵称" maxlength="20">
                 </div>
+                <!-- 用户名 -->
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" class="form-input" id="usernameInput" required placeholder="请输入用户名">
+                    <input type="text" class="form-input" id="usernameInput" required placeholder="3-20位，字母/数字/下划线"
+                        maxlength="20" autocomplete="username" oninput="validateUsername()">
+                    <div class="form-hint" id="usernameHint">
+                        <span class="hint-rule" id="rule-len"><i class="ph-bold ph-circle"></i> 3-20 个字符</span>
+                        <span class="hint-rule" id="rule-char"><i class="ph-bold ph-circle"></i> 仅字母、数字、下划线</span>
+                    </div>
                 </div>
+                <!-- 密码 -->
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" class="form-input" id="passwordInput" required placeholder="请输入密码">
+                    <div class="password-wrapper">
+                        <input type="password" class="form-input" id="passwordInput" required placeholder="至少6位，包含字母和数字"
+                            maxlength="100" autocomplete="current-password" oninput="validatePassword()">
+                        <span class="toggle-password" onclick="togglePasswordVisibility('passwordInput', this)"><i
+                                class="ph-bold ph-eye"></i></span>
+                    </div>
+                    <div class="form-hint" id="passwordHint" style="display:none;">
+                        <span class="hint-rule" id="rule-pwlen"><i class="ph-bold ph-circle"></i> 至少 6 个字符</span>
+                        <span class="hint-rule" id="rule-pwletter"><i class="ph-bold ph-circle"></i> 包含字母</span>
+                        <span class="hint-rule" id="rule-pwnum"><i class="ph-bold ph-circle"></i> 包含数字</span>
+                    </div>
+                    <!-- 密码强度条（仅注册时显示） -->
+                    <div class="strength-bar-container" id="strengthBarContainer" style="display:none;">
+                        <div class="strength-bar" id="strengthBar"></div>
+                    </div>
+                    <div class="strength-label" id="strengthLabel" style="display:none;"></div>
                 </div>
+                <!-- 确认密码（仅注册时显示） -->
+                <div class="form-group" id="confirmPwGroup" style="display: none;">
+                    <label>确认密码</label>
+                    <div class="password-wrapper">
+                        <input type="password" class="form-input" id="confirmPasswordInput" placeholder="再次输入密码"
+                            maxlength="100" oninput="validateConfirmPassword()">
+                        <span class="toggle-password"
+                            onclick="togglePasswordVisibility('confirmPasswordInput', this)"><i
+                                class="ph-bold ph-eye"></i></span>
+                    </div>
+                    <div class="form-hint" id="confirmPwHint"></div>
+                </div>
+                <!-- 错误提示 -->
+                <div class="auth-error" id="authError" style="display:none;"></div>
                 <button type="submit" class="btn-primary" id="authSubmitBtn">登录</button>
             </form>
             <div class="auth-switch">
@@ -353,20 +390,165 @@
         // ==================== 认证逻辑 ====================
         function toggleAuthMode() {
             state.isRegisterMode = !state.isRegisterMode;
-            document.getElementById('authTitle').innerText = state.isRegisterMode ? '创建账户' : '欢迎回来';
-            document.getElementById('authSubtitle').innerText = state.isRegisterMode ? '注册以开始使用' : '登录以继续使用';
-            document.getElementById('authSubmitBtn').innerText = state.isRegisterMode ? '注册' : '登录';
-            document.getElementById('authSwitchText').innerText = state.isRegisterMode ? '已有账号？' : '还没有账号？';
-            document.getElementById('authSwitchLink').innerText = state.isRegisterMode ? '直接登录' : '立即注册';
-            document.getElementById('nicknameGroup').style.display = state.isRegisterMode ? 'block' : 'none';
+            const isReg = state.isRegisterMode;
+            document.getElementById('authTitle').innerText = isReg ? '创建账户' : '欢迎回来';
+            document.getElementById('authSubtitle').innerText = isReg ? '注册以开始使用' : '登录以继续使用';
+            document.getElementById('authSubmitBtn').innerText = isReg ? '注册' : '登录';
+            document.getElementById('authSwitchText').innerText = isReg ? '已有账号？' : '还没有账号？';
+            document.getElementById('authSwitchLink').innerText = isReg ? '直接登录' : '立即注册';
+            document.getElementById('nicknameGroup').style.display = isReg ? 'block' : 'none';
+            document.getElementById('confirmPwGroup').style.display = isReg ? 'block' : 'none';
+            document.getElementById('passwordHint').style.display = isReg ? 'flex' : 'none';
+            document.getElementById('strengthBarContainer').style.display = isReg ? 'block' : 'none';
+            document.getElementById('strengthLabel').style.display = isReg ? 'block' : 'none';
+            // 清空错误提示
+            hideAuthError();
+            // 切换时重新校验
+            if (isReg) { validateUsername(); validatePassword(); }
         }
 
+        // ---- 用户名实时校验 ----
+        function validateUsername() {
+            if (!state.isRegisterMode) return;
+            const val = document.getElementById('usernameInput').value;
+            const ruleLen = document.getElementById('rule-len');
+            const ruleChar = document.getElementById('rule-char');
+            // 长度 3-20
+            setRuleStatus(ruleLen, val.length >= 3 && val.length <= 20);
+            // 仅允许 字母 数字 下划线
+            setRuleStatus(ruleChar, /^[a-zA-Z0-9_]*$/.test(val) && val.length > 0);
+        }
+
+        // ---- 密码实时校验 + 强度条 ----
+        function validatePassword() {
+            if (!state.isRegisterMode) return;
+            const val = document.getElementById('passwordInput').value;
+            const rulePwlen = document.getElementById('rule-pwlen');
+            const rulePwletter = document.getElementById('rule-pwletter');
+            const rulePwnum = document.getElementById('rule-pwnum');
+
+            const hasLen = val.length >= 6;
+            const hasLetter = /[a-zA-Z]/.test(val);
+            const hasNum = /[0-9]/.test(val);
+            setRuleStatus(rulePwlen, hasLen);
+            setRuleStatus(rulePwletter, hasLetter);
+            setRuleStatus(rulePwnum, hasNum);
+
+            // 密码强度条
+            let score = 0;
+            if (hasLen) score++;
+            if (hasLetter) score++;
+            if (hasNum) score++;
+            if (/[^a-zA-Z0-9]/.test(val)) score++; // 特殊字符加分
+            if (val.length >= 12) score++; // 超长加分
+
+            const bar = document.getElementById('strengthBar');
+            const label = document.getElementById('strengthLabel');
+            const levels = [
+                { width: '0%', color: 'transparent', text: '' },
+                { width: '20%', color: '#f43f5e', text: '弱' },
+                { width: '40%', color: '#f97316', text: '较弱' },
+                { width: '65%', color: '#eab308', text: '一般' },
+                { width: '85%', color: '#22c55e', text: '强' },
+                { width: '100%', color: '#10b981', text: '非常强' }
+            ];
+            const lv = levels[Math.min(score, 5)];
+            bar.style.width = lv.width;
+            bar.style.background = lv.color;
+            label.textContent = val ? `密码强度：${lv.text}` : '';
+            label.style.color = lv.color;
+
+            // 同步校验确认密码
+            validateConfirmPassword();
+        }
+
+        // ---- 确认密码校验 ----
+        function validateConfirmPassword() {
+            if (!state.isRegisterMode) return;
+            const pw = document.getElementById('passwordInput').value;
+            const cpw = document.getElementById('confirmPasswordInput').value;
+            const hint = document.getElementById('confirmPwHint');
+            if (!cpw) { hint.innerHTML = ''; return; }
+            if (pw === cpw) {
+                hint.innerHTML = '<span style="color:#22c55e;font-size:12px;"><i class="ph-bold ph-check-circle"></i> 密码匹配</span>';
+            } else {
+                hint.innerHTML = '<span style="color:#f43f5e;font-size:12px;"><i class="ph-bold ph-x-circle"></i> 两次密码不一致</span>';
+            }
+        }
+
+        // ---- 辅助：设置校验规则状态图标和颜色 ----
+        function setRuleStatus(el, pass) {
+            if (!el) return;
+            const icon = el.querySelector('i');
+            if (pass) {
+                el.style.color = '#22c55e';
+                icon.className = 'ph-bold ph-check-circle';
+            } else {
+                el.style.color = 'var(--text-muted)';
+                icon.className = 'ph-bold ph-circle';
+            }
+        }
+
+        // ---- 密码可见/隐藏切换 ----
+        function togglePasswordVisibility(inputId, toggleEl) {
+            const input = document.getElementById(inputId);
+            const icon = toggleEl.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'ph-bold ph-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'ph-bold ph-eye';
+            }
+        }
+
+        // ---- 显示/隐藏错误信息 ----
+        function showAuthError(msg) {
+            const el = document.getElementById('authError');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+        function hideAuthError() {
+            document.getElementById('authError').style.display = 'none';
+        }
+
+        // ---- 主认证提交 ----
         async function handleAuth(e) {
             e.preventDefault();
-            const username = document.getElementById('usernameInput').value;
+            hideAuthError();
+            const username = document.getElementById('usernameInput').value.trim();
             const password = document.getElementById('passwordInput').value;
-            const nickname = document.getElementById('nicknameInput').value;
+            const nickname = document.getElementById('nicknameInput').value.trim();
             const btn = document.getElementById('authSubmitBtn');
+
+            // ===== 前端校验（注册模式） =====
+            if (state.isRegisterMode) {
+                if (username.length < 3 || username.length > 20) {
+                    showAuthError('用户名长度必须在 3-20 个字符之间');
+                    return;
+                }
+                if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                    showAuthError('用户名只能包含字母、数字和下划线');
+                    return;
+                }
+                if (password.length < 6) {
+                    showAuthError('密码长度至少为 6 位');
+                    return;
+                }
+                if (!/[a-zA-Z]/.test(password)) {
+                    showAuthError('密码必须包含至少一个字母');
+                    return;
+                }
+                if (!/[0-9]/.test(password)) {
+                    showAuthError('密码必须包含至少一个数字');
+                    return;
+                }
+                const confirmPw = document.getElementById('confirmPasswordInput').value;
+                if (password !== confirmPw) {
+                    showAuthError('两次输入的密码不一致');
+                    return;
+                }
+            }
 
             btn.innerHTML = '<i class="ph-bold ph-spinner ph-spin"></i> 处理中...';
             btn.disabled = true;
@@ -374,7 +556,7 @@
             try {
                 const endpoint = state.isRegisterMode ? '/api/v1/auth/register' : '/api/v1/auth/login';
                 const body = { username, password };
-                if (state.isRegisterMode) body.nickname = nickname;
+                if (state.isRegisterMode) body.nickname = nickname || username;
 
                 const res = await fetch(endpoint, {
                     method: 'POST',
@@ -386,14 +568,14 @@
                 if (!res.ok) throw new Error(data.error || '请求失败');
 
                 if (data.access_token) {
-                    // 登录成功
                     loginSuccess(data);
                 } else if (state.isRegisterMode) {
-                    alert('注册成功，请登录');
+                    showAuthError('注册成功，请登录');
+                    document.getElementById('authError').style.color = '#22c55e';
                     toggleAuthMode();
                 }
             } catch (err) {
-                alert(err.message);
+                showAuthError(err.message);
             } finally {
                 btn.innerHTML = state.isRegisterMode ? '注册' : '登录';
                 btn.disabled = false;
@@ -404,7 +586,7 @@
             state.token = data.access_token;
             state.user = data.user;
             localStorage.setItem('auth_token', data.access_token);
-            localStorage.setItem('user_info', JSON.stringify(data.user)); // 简单缓存用户信息
+            localStorage.setItem('user_info', JSON.stringify(data.user));
 
             updateUserProfile(data.user);
             els.authModal.classList.remove('active');
