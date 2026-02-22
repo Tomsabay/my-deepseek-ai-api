@@ -19,8 +19,8 @@ type User struct {
 	// Username 用户名（唯一，用于登录）
 	Username string `gorm:"uniqueIndex;size:50;not null" json:"username"`
 
-	// Email 邮箱（唯一，可选）
-	Email string `gorm:"uniqueIndex;size:100" json:"email,omitempty"`
+	// Email 邮箱（可选）
+	Email *string `gorm:"size:100" json:"email,omitempty"`
 
 	// PasswordHash 密码哈希值（使用 bcrypt 加密）
 	// 注意：不要在 JSON 中暴露密码！

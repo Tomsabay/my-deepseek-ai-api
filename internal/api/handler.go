@@ -72,18 +72,23 @@ func (h *Handler) Chat(c *gin.Context) {
 	}
 
 	// 尝试保存用户消息（如果有 ConversationID）
-	// 同时校验对话是否属于当前登录用户，防止跨账号串数据
+	// 必须是登录用户且是对话拥有者才能写入，防止跨账号串数据
 	if req.ConversationID > 0 {
-		if currentUserID > 0 {
-			// 校验对话归属权：只有对话拥有者才能写入消息
-			_, err := h.conversationService.GetConversation(req.ConversationID, currentUserID)
-			if err != nil {
-				log.Printf("chat: 用户 %d 尝试访问不属于自己的对话 %d", currentUserID, req.ConversationID)
-				c.JSON(http.StatusForbidden, model.ChatResponse{
-					Error: "无权访问此对话",
-				})
-				return
-			}
+		if currentUserID == 0 {
+			// 未登录用户不能往指定对话写入消息
+			c.JSON(http.StatusUnauthorized, model.ChatResponse{
+				Error: "请先登录再使用对话功能",
+			})
+			return
+		}
+		// 校验对话归属权：只有对话拥有者才能写入消息
+		_, err := h.conversationService.GetConversation(req.ConversationID, currentUserID)
+		if err != nil {
+			log.Printf("chat: 用户 %d 尝试访问不属于自己的对话 %d", currentUserID, req.ConversationID)
+			c.JSON(http.StatusForbidden, model.ChatResponse{
+				Error: "无权访问此对话",
+			})
+			return
 		}
 
 		userContent := req.Message
@@ -95,7 +100,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		}
 
 		if userContent != "" {
-			h.conversationService.AddMessage(req.ConversationID, "user", userContent)
+			h.conversationService.AddMessage(req.ConversationID, currentUserID, "user", userContent)
 		}
 	}
 
@@ -130,7 +135,7 @@ func (h *Handler) Chat(c *gin.Context) {
 
 		// 检查是否需要流式响应
 		if req.Stream {
-			h.handleMultimodalStreamResponse(c, multimodalMessages, req.ConversationID, aiSvc)
+			h.handleMultimodalStreamResponse(c, multimodalMessages, req.ConversationID, currentUserID, aiSvc)
 			return
 		}
 
@@ -145,7 +150,7 @@ func (h *Handler) Chat(c *gin.Context) {
 
 		// 保存 AI 回复
 		if req.ConversationID > 0 {
-			h.conversationService.AddMessage(req.ConversationID, "assistant", reply)
+			h.conversationService.AddMessage(req.ConversationID, currentUserID, "assistant", reply)
 		}
 
 		c.JSON(http.StatusOK, model.ChatResponse{
@@ -157,7 +162,7 @@ func (h *Handler) Chat(c *gin.Context) {
 	// 检查是否需要流式响应（无图片的普通请求）
 	if req.Stream {
 		log.Printf("chat: stream request, conversation_id=%d, messages=%d", req.ConversationID, len(messages))
-		h.handleStreamResponse(c, messages, req.ConversationID, aiSvc)
+		h.handleStreamResponse(c, messages, req.ConversationID, currentUserID, aiSvc)
 		return
 	}
 
@@ -171,9 +176,9 @@ func (h *Handler) Chat(c *gin.Context) {
 		return
 	}
 
-	// 保存 AI 回复（如果有 ConversationID）
-	if req.ConversationID > 0 {
-		h.conversationService.AddMessage(req.ConversationID, "assistant", reply)
+	// 保存 AI 回复（如果有 ConversationID 且已登录）
+	if req.ConversationID > 0 && currentUserID > 0 {
+		h.conversationService.AddMessage(req.ConversationID, currentUserID, "assistant", reply)
 	}
 
 	c.JSON(http.StatusOK, model.ChatResponse{
@@ -194,6 +199,24 @@ func (h *Handler) ChatStream(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户 ID（可选认证）
+	var currentUserID uint
+	if uid, exists := c.Get("userID"); exists {
+		currentUserID = uid.(uint)
+	}
+
+	// 校验对话归属权
+	if req.ConversationID > 0 && currentUserID > 0 {
+		_, err := h.conversationService.GetConversation(req.ConversationID, currentUserID)
+		if err != nil {
+			log.Printf("chat/stream: 用户 %d 尝试访问不属于自己的对话 %d", currentUserID, req.ConversationID)
+			c.JSON(http.StatusForbidden, model.ChatResponse{
+				Error: "无权访问此对话",
+			})
+			return
+		}
+	}
+
 	messages := h.buildMessages(req)
 
 	// 同样支持动态模型选择
@@ -204,7 +227,7 @@ func (h *Handler) ChatStream(c *gin.Context) {
 		}
 	}
 
-	h.handleStreamResponse(c, messages, req.ConversationID, aiSvc)
+	h.handleStreamResponse(c, messages, req.ConversationID, currentUserID, aiSvc)
 }
 
 // ============================================
@@ -286,7 +309,7 @@ func (h *Handler) buildMultimodalMessages(messages []model.OpenAIMessage, attach
 // ============================================
 // handleStreamResponse 处理流式响应
 // aiSvc 支持动态模型切换，如果请求指定了模型，就用克隆后的实例
-func (h *Handler) handleStreamResponse(c *gin.Context, messages []model.OpenAIMessage, conversationID uint, aiSvc service.AIService) {
+func (h *Handler) handleStreamResponse(c *gin.Context, messages []model.OpenAIMessage, conversationID, userID uint, aiSvc service.AIService) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -308,8 +331,8 @@ func (h *Handler) handleStreamResponse(c *gin.Context, messages []model.OpenAIMe
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				w.Flush()
 
-				if conversationID > 0 && fullReply != "" {
-					h.conversationService.AddMessage(conversationID, "assistant", fullReply)
+				if conversationID > 0 && userID > 0 && fullReply != "" {
+					h.conversationService.AddMessage(conversationID, userID, "assistant", fullReply)
 				}
 				log.Printf("chat: stream done, conversation_id=%d, size=%d", conversationID, len(fullReply))
 				return
@@ -336,7 +359,7 @@ func (h *Handler) handleStreamResponse(c *gin.Context, messages []model.OpenAIMe
 
 // ============================================
 // handleMultimodalStreamResponse 处理多模态流式响应
-func (h *Handler) handleMultimodalStreamResponse(c *gin.Context, messages []model.OpenAIMultimodalMessage, conversationID uint, aiSvc service.AIService) {
+func (h *Handler) handleMultimodalStreamResponse(c *gin.Context, messages []model.OpenAIMultimodalMessage, conversationID, userID uint, aiSvc service.AIService) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -358,8 +381,8 @@ func (h *Handler) handleMultimodalStreamResponse(c *gin.Context, messages []mode
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				w.Flush()
 
-				if conversationID > 0 && fullReply != "" {
-					h.conversationService.AddMessage(conversationID, "assistant", fullReply)
+				if conversationID > 0 && userID > 0 && fullReply != "" {
+					h.conversationService.AddMessage(conversationID, userID, "assistant", fullReply)
 				}
 				log.Printf("chat: multimodal stream done, conversation_id=%d, size=%d", conversationID, len(fullReply))
 				return

@@ -126,9 +126,20 @@ func (s *ConversationService) DeleteConversation(conversationID, userID uint) er
 }
 
 // ============================================
-// AddMessage 添加消息到对话
+// AddMessage 添加消息到对话（带归属权校验）
 // ============================================
-func (s *ConversationService) AddMessage(conversationID uint, role, content string) (*model.Message, error) {
+func (s *ConversationService) AddMessage(conversationID, userID uint, role, content string) (*model.Message, error) {
+	// 只有当 userID > 0 时才做归属权校验（兼容匿名模式）
+	if userID > 0 {
+		var conv model.Conversation
+		if err := database.DB.First(&conv, conversationID).Error; err != nil {
+			return nil, ErrConversationNotFound
+		}
+		if conv.UserID != userID {
+			return nil, ErrUnauthorized
+		}
+	}
+
 	message := &model.Message{
 		ConversationID: conversationID,
 		Role:           role,
