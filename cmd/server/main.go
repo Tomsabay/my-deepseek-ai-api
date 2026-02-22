@@ -147,7 +147,7 @@ type Config struct {
 // ============================================
 func loadConfig() Config {
 	return Config{
-		baseURL:      getEnv("AI_API_URL", "https://api.openai.com/v1"),
+		baseURL:      getEnv("AI_API_URL", "https://api.deepseek.com/v1"),
 		apiKey:       getEnv("AI_API_KEY", ""),
 		model:        getEnv("AI_MODEL", defaultModel),
 		systemPrompt: getEnv("AI_SYSTEM_PROMPT", defaultSystemPrompt),
